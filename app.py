@@ -13,8 +13,6 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
-# -------------------- MODELS --------------------
-
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True)
@@ -47,8 +45,6 @@ class BackupLog(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
-
-# -------------------- BASE TEMPLATE --------------------
 
 base_template = """
 <!DOCTYPE html>
@@ -111,8 +107,6 @@ base_template = """
 </html>
 """
 
-# -------------------- ROUTES --------------------
-
 @app.route('/')
 def home():
     content = """
@@ -155,7 +149,6 @@ def login():
 @login_required
 def dashboard():
     resources = ResourceRequest.query.filter_by(user_id=current_user.id).all()
-    # Get all pending changes for this user to identify locked resources
     pending_changes = [c.resource_id for c in ChangeRequest.query.filter_by(status="Pending").all()]
     
     content = "<h3>Your Active Assets</h3>"
@@ -177,7 +170,6 @@ def dashboard():
     content += "<br><a href='/catalog' class='btn btn-light'>+ Request New</a> <a href='/change_request' class='btn btn-warning'>Modify Existing</a>"
     return render_template_string(base_template, content=content)
 
-# ---------------- SERVICE CATALOG ----------------
 
 @app.route('/catalog')
 @login_required
@@ -259,7 +251,6 @@ def request_resource():
     flash("Resource request submitted for approval.")
     return redirect(url_for('dashboard'))
 
-# ---------------- CHANGE MANAGEMENT ----------------
 
 @app.route('/change_request', methods=['GET','POST'])
 @login_required
@@ -267,9 +258,7 @@ def change_request():
     user_resources = ResourceRequest.query.filter_by(user_id=current_user.id, status="Approved").all()
     
     if request.method == 'POST':
-        # Get the ID of the resource the user wants to change
         resource_id = request.form.get('resource_id')
-        # Get the NEW specs selected from the dropdown
         new_specs = request.form.get('new_specs')
 
         ch = ChangeRequest(resource_id=resource_id, new_specs=new_specs, status="Pending")
@@ -278,7 +267,6 @@ def change_request():
         flash("Request for Change (RFC) submitted to the Change Advisory Board.")
         return redirect(url_for('dashboard'))
 
-    # If the user has no approved resources, they can't request a change
     if not user_resources:
         content = "<div class='card p-4'><h3>No Active Resources</h3><p>You need an approved resource before you can request a change.</p><a href='/catalog' class='btn btn-primary'>Go to Catalog</a></div>"
         return render_template_string(base_template, content=content)
@@ -292,7 +280,6 @@ def change_request():
             <label class='form-label'><b>1. Select Resource to Modify:</b></label>
             <select class='form-control mb-3' name='resource_id' id='res_selector' onchange="syncResourceType()">
     """
-    # Populate the first dropdown with the user's existing approved resources
     for r in user_resources:
         content += f"<option value='{r.id}' data-type='{r.resource_type}'>ID: {r.id} | {r.resource_type} ({r.specs})</option>"
 
@@ -350,8 +337,6 @@ def change_request():
     """
     return render_template_string(base_template, content=content)
 
-# ---------------- ADMIN PANEL ----------------
-
 @app.route('/admin')
 @login_required
 def admin():
@@ -365,7 +350,6 @@ def admin():
     
     content = "<h2 class='mb-4 border-bottom pb-2 text-info'>System Administration Console</h2>"
     
-    # --- SECTION 1: NEW RESOURCE PROVISIONING ---
     content += "<div class='mb-5'><h4><span class='badge bg-primary me-2'>1</span> New Service Requests</h4>"
     pending_reqs = [r for r in reqs if r.status == "Pending"]
     for r in pending_reqs:
@@ -378,12 +362,10 @@ def admin():
         </div>"""
     content += "</div>"
 
-    # --- SECTION 2: CHANGE MANAGEMENT (RFC) WITH BEFORE/AFTER ---
     content += "<div class='mb-5'><h4><span class='badge bg-warning text-dark me-2'>2</span> Change Requests (RFC)</h4>"
     pending_changes = [c for c in changes if c.status == "Pending"]
     
     for c in pending_changes:
-        # Fetch the original resource and the owner
         original_res = ResourceRequest.query.get(c.resource_id)
         owner = User.query.get(original_res.user_id) if original_res else None
         
@@ -406,7 +388,6 @@ def admin():
         </div>"""
     content += "</div>"
 
-    # --- SECTION 3: SERVICE OPERATIONS (MAINTENANCE) ---
     content += """
     <div class='mb-5'>
         <h4><span class='badge bg-danger me-2'>3</span> Availability Management</h4>
@@ -425,7 +406,6 @@ def admin():
             content += f"<div class='alert alert-dark py-2 mb-2 small'>🛠️ <strong>{m.service}</strong> is scheduled for <strong>{m.scheduled_time}</strong></div>"
     content += "</div><hr class='my-4' style='opacity: 0.1;'>"
 
-    # --- SECTION 4: CONTINUITY MANAGEMENT (BACKUPS) ---
     content += """
     <div class='mb-5'>
         <h4><span class='badge bg-info text-dark me-2'>4</span> Service Continuity</h4>
@@ -513,36 +493,28 @@ def inspect_db():
             <tbody>
     """
     
-# 1. Separate users into lists (Do this OUTSIDE the loop)
     admins = [u for u in users if u.role == 'admin']
     customers = [u for u in users if u.role != 'admin']
 
-    # Start building content
     content = "<div class='card p-4 shadow'><h3>System Audit: User Roles & Assets</h3>"
 
-    # --- ADMIN SECTION ---
     content += "<h5 class='text-danger mt-3'>Privileged Accounts (Admins)</h5>"
     content += "<ul class='list-group mb-4'>"
     for a in admins:
         content += f"<li class='list-group-item bg-light'>👑 <strong>{a.username}</strong> - Full System Access</li>"
     content += "</ul>"
 
-    # --- USER SECTION ---
     content += "<h5 class='text-primary'>Standard Service Users</h5>"
     content += "<table class='table table-sm table-hover'><thead><tr><th>Username</th><th>Active Services</th></tr></thead><tbody>"
     
     for u in customers:
         services = ResourceRequest.query.filter_by(user_id=u.id).all()
-        # Create a list of services with status colors
         if services:
             service_list = ", ".join([f"{s.resource_type}" for s in services])
         else:
             service_list = "<span class='text-muted'>No Services</span>"
-            
-        # Fixed the missing '<' in <tr> below
         content += f"<tr><td><strong>{u.username}</strong></td><td>{service_list}</td></tr>"
     
-    # Close the table and add the back button
     content += """
             </tbody>
         </table>
@@ -556,4 +528,6 @@ def inspect_db():
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
