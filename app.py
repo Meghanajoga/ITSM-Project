@@ -528,6 +528,28 @@ def inspect_db():
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
+        if not User.query.filter_by(username="Meghana").first():
+            db.session.add(User(username="Meghana", password=generate_password_hash("meghana0710"), role="admin"))
+        
+        if not User.query.filter_by(username="user1").first():
+            user1 = User(username="user1", password=generate_password_hash("user123"), role="user")
+            db.session.add(user1)
+            db.session.commit() 
+            
+            if not ResourceRequest.query.filter_by(user_id=user1.id).first():
+                db.session.add(ResourceRequest(resource_type="Virtual Machine", specs="Standard (2 vCPU, 4GB)", status="Approved", user_id=user1.id))
+                db.session.add(ResourceRequest(resource_type="Storage Bucket (S3)", specs="Standard (50GB)", status="Pending", user_id=user1.id))
+
+        if not User.query.filter_by(username="user2").first():
+            user2 = User(username="user2", password=generate_password_hash("user234"), role="user")
+            db.session.add(user2)
+            db.session.commit()
+         
+            if not Maintenance.query.first():
+                db.session.add(Maintenance(service="Main Database", scheduled_time="Sunday 02:00 AM"))
+
+        db.session.commit()
     import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+
